@@ -1,0 +1,135 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+// Necessary for Next auth
+model Account {
+    id                       String  @id @default(cuid())
+    userId                   String
+    type                     String
+    provider                 String 
+    providerAccountId        String
+    refresh_token            String? // @db.Text
+    access_token             String? // @db.Text
+    expires_at               Int?
+    token_type               String?
+    scope                    String?
+    id_token                 String? // @db.Text
+    session_state            String?
+    user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+    refresh_token_expires_in Int?
+
+    @@unique([provider, providerAccountId])
+}
+
+model Session {
+    id           String   @id @default(cuid())
+    sessionToken String   @unique
+    userId       String
+    expires      DateTime
+    user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+    id            String    @id @default(cuid())
+    name          String?
+    email         String?   @unique
+    password      String?
+    emailVerified DateTime?
+    image         String?
+    role          Role      @default(USER)
+    accounts      Account[]
+    sessions      Session[]
+    timeLogs      TimeLog[]
+
+    projectMembers ProjectMember[] // 👈 user's project memberships
+    Project        Project[]
+}
+
+model Project {
+    id        String    @id @default(cuid())
+    name      String
+    createdAt DateTime  @default(now())
+    updatedAt DateTime  @updatedAt
+    timeLogs  TimeLog[]
+
+    members    ProjectMember[] // 👈 all members (users) in this project
+    owner      User?           @relation(fields: [userId], references: [id])
+    userId     String?
+    Repository Repository[]
+}
+
+model ProjectMember {
+    id        String @id @default(cuid())
+    userId    String
+    projectId String
+
+    user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+    project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+    @@unique([userId, projectId]) // prevent duplicates
+}
+
+model Label {
+    id        String   @id @default(cuid())
+    name      String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    timeLogs TimeLog[]
+
+    @@unique([name]) // Optional: prevent duplicate labels if desired globally
+}
+
+model TimeLog {
+    id        String    @id @default(cuid())
+    start     DateTime
+    end       DateTime?
+    userId    String
+    projectId String
+    labelId   String
+    user      User      @relation(fields: [userId], references: [id])
+    project   Project   @relation(fields: [projectId], references: [id])
+    label     Label     @relation(fields: [labelId], references: [id])
+    Commit    Commit[]
+}
+
+model VerificationToken {
+    identifier String
+    token      String   @unique
+    expires    DateTime
+
+    @@unique([identifier, token])
+}
+
+model Repository {
+    id        String   @id @default(cuid())
+    name      String
+    url       String
+    provider  String // "github" | "gitlab"
+    projectId String
+    project   Project  @relation(fields: [projectId], references: [id])
+    commits   Commit[]
+}
+
+model Commit {
+    id         String     @id @default(cuid())
+    sha        String
+    message    String
+    timestamp  DateTime
+    author     String
+    repoId     String
+    repository Repository @relation(fields: [repoId], references: [id])
+    timelogId  String
+    timelog    TimeLog    @relation(fields: [timelogId], references: [id])
+}
+
+enum Role {
+    USER
+    ADMIN
+}
