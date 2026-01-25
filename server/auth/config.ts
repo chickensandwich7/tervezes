@@ -1,44 +1,45 @@
-// ✅ Auth.js / NextAuth v5 configuration file
-import type { AuthOptions } from "next-auth";
+
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import Google from "next-auth/providers/google";
-import Discord from "next-auth/providers/discord";
+import GitHub from "next-auth/providers/github";
 import GitLab from "next-auth/providers/gitlab";
 import Credentials from "next-auth/providers/credentials";
-import type { DefaultSession } from "next-auth";
+import type { NextAuthConfig } from "next-auth"; 
 
 import { db } from "@/server/db";
 import { signInSchema } from "@/lib/zod";
-import { saltAndHashPassword, getUserFromDB } from "@/lib/utils";
+import { getUserFromDB } from "@/lib/utils"; 
 import { ZodError } from "zod";
-import type { User } from "@prisma/client";
-
-declare module "next-auth" {
-  interface Session extends DefaultSession {
-    user: {
-      id: string;
-    } & DefaultSession["user"];
-  }
-}
-
-// ✅ App Router compatible configuration
+console.log("---------------------------------------");
+console.log("DEBUG ENV CHECK:");
+console.log("GITHUB ID:", process.env.AUTH_GITHUB_ID);
+console.log("---------------------------------------");
 export const authConfig = {
+
   adapter: PrismaAdapter(db),
 
+
+  session: { strategy: "jwt" },
+
   providers: [
-    
+    GitHub({
+      clientId: process.env.AUTH_GITHUB_ID,
+      clientSecret: process.env.AUTH_GITHUB_SECRET,
+    }),
+    GitLab({
+      clientId: process.env.AUTH_GITLAB_ID,
+      clientSecret: process.env.AUTH_GITLAB_SECRET,
+    }),
     Credentials({
       credentials: {
         email: { label: "Email", type: "text" },
         password: { label: "Password", type: "password" },
       },
-      authorize: async (credentials): Promise<User | null> => {
+      authorize: async (credentials) => {
         try {
-          const { email, password } =
-            await signInSchema.parseAsync(credentials);
+          const { email, password } = await signInSchema.parseAsync(credentials);
 
-          const pwHash = await saltAndHashPassword(password);
-          const user = await getUserFromDB(email, pwHash);
+
+          const user = await getUserFromDB(email, password);
 
           return user ?? null;
         } catch (err) {
@@ -50,17 +51,25 @@ export const authConfig = {
     }),
   ],
 
+
   callbacks: {
-    session: ({ session, user }) => ({
-      ...session,
-      user: {
-        ...session.user,
-        id: user.id,
-      },
-    }),
+    jwt({ token, user }) {
+
+      if (user) {
+        token.id = user.id;
+      }
+      return token;
+    },
+    session({ session, token }) {
+
+      if (session.user && token.id) {
+        session.user.id = token.id as string;
+      }
+      return session;
+    },
   },
 
   pages: {
     signIn: "/login",
   },
-} satisfies AuthOptions;
+} satisfies NextAuthConfig;

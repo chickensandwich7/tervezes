@@ -1,5 +1,6 @@
-import { auth } from "./index";
+import NextAuth from "next-auth";
+import { authConfig } from "@/server/auth/config";
 
-export async function getServerAuthSession() {
-  return auth();
-}
+const handler = NextAuth(authConfig);
+
+export const { GET, POST } = handler.handlers;
